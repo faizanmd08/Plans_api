@@ -66,15 +66,22 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign({ userId: user[0].id }, JWT_SECRET, {
       expiresIn: "1h",
     });
-
-    res.status(200).json({ message: "Login successful", token });
+    res.cookie("access_token", token, {
+      maxAge: 60 * 60 * 1000,
+      httpOnly: true,
+      sameSite: "none",
+      path: "/",
+      secure: true,
+    });
+    return res.status(200).json({ message: "Login successful" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
 const verifyJWT = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  // const token = req.headers.authorization?.split(" ")[1];
+  const token = req.headers.cookie.substring(13);
   if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -166,8 +173,9 @@ router.get("/filter", async (req, res) => {
     query += `
       AND id IN (
         SELECT plans.id
-        FROM plans
-        JOIN friends ON plans.id = friends.plan_id
+        FROM plans, friends
+        JOIN JSON_TABLE(friends.friends_list, '$[*]' COLUMNS (elem INT PATH '$')) AS jt
+          ON jt.elem = plans.user_id
         WHERE friends.user_id = ?
       )
     `;
